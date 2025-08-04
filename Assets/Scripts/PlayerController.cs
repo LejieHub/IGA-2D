@@ -6,6 +6,38 @@ public class PlayerController : MonoBehaviour
     private Rigidbody2D rb2d => GetComponent<Rigidbody2D>();
     private Animator anim => GetComponent<Animator>();
 
+    [Header("Sprite Bars")]
+    public Transform gpaBar;
+    public Transform pressureBar;
+
+    private Vector3 gpaBaseScale;
+    private Vector3 pressureBaseScale;
+
+    // ====== Player Static Attributes ======
+    public enum Personality { Introvert, Extrovert }
+    public enum AcademicLevel { Good, Medium, Poor }
+    public enum FamilyBackground { Good, Bad }
+    public enum Hobby { Game, Music, Sport }
+
+    [Header("Character Attributes")]
+    public Personality personality = Personality.Introvert;
+    public AcademicLevel academicLevel = AcademicLevel.Medium;
+    public FamilyBackground familyBackground = FamilyBackground.Good;
+    public Hobby hobby = Hobby.Game;
+
+    // ====== GPA & Pressure System ======
+    [Header("Status")]
+    [Range(0, 4f)] public float GPA = 2.5f;
+    [Range(0, 100)] public float pressure = 0f;
+
+    public float GPADecreaseRate = 0.01f;     // √ø√Îºı…Ÿ
+    public float pressureIncreaseRate = 0.05f;
+
+    public float maxGPA = 4.0f;
+    public float minGPA = 0f;
+    public float maxPressure = 100f;
+
+    // ====== Movement ======
     [Header("Movement")]
     public float moveSpeed = 5f;
 
@@ -20,12 +52,40 @@ public class PlayerController : MonoBehaviour
     public Vector2 checkBoxSize = new Vector2(0.4f, 0.1f);
     public LayerMask groundLayer;
 
+    void Start()
+    {
+        gpaBaseScale = gpaBar.localScale;
+        pressureBaseScale = pressureBar.localScale;
+    }
     void Update()
     {
         GetInput();
         CheckGround();
-        
         TurnAround();
+
+        // GPA & Pressure Over Time
+        GPA -= GPADecreaseRate * Time.deltaTime;
+        pressure += pressureIncreaseRate * Time.deltaTime;
+
+        GPA = Mathf.Clamp(GPA, minGPA, maxGPA);
+        pressure = Mathf.Clamp(pressure, 0f, maxPressure);
+        
+        // Failure check
+        if (GPA <= 0f)
+        {
+            Debug.Log("GPA dropped to 0: Dropout ending");
+            // TODO: Trigger dropout ending
+        }
+
+        if (pressure >= maxPressure)
+        {
+            Debug.Log("Pressure exploded: Breakdown ending");
+            // TODO: Trigger stress breakdown ending
+        }
+
+        gpaBar.localScale = new Vector3(gpaBaseScale.x * (GPA / maxGPA), gpaBaseScale.y, gpaBaseScale.z);
+        pressureBar.localScale = new Vector3(pressureBaseScale.x * (pressure / maxPressure), pressureBaseScale.y, pressureBaseScale.z);
+
     }
 
     private void FixedUpdate()
@@ -107,5 +167,34 @@ public class PlayerController : MonoBehaviour
             Gizmos.color = Color.red;
             Gizmos.DrawWireCube(groundCheckPoint.position, checkBoxSize);
         }
+    }
+
+    // ====== Public External Triggers ======
+
+    // Called when stomping a Homework or Test
+    public void GainGPA(float baseValue)
+    {
+        float multiplier = academicLevel switch
+        {
+            AcademicLevel.Good => 1.0f,
+            AcademicLevel.Medium => 0.75f,
+            AcademicLevel.Poor => 0.5f,
+            _ => 1f
+        };
+
+        GPA += baseValue * multiplier;
+        GPA = Mathf.Clamp(GPA, minGPA, maxGPA);
+    }
+
+    public void GainPressure(float amount)
+    {
+        pressure += amount;
+        pressure = Mathf.Clamp(pressure, 0f, maxPressure);
+    }
+
+    public void LoseGPA(float amount)
+    {
+        GPA -= amount;
+        GPA = Mathf.Clamp(GPA, minGPA, maxGPA);
     }
 }
