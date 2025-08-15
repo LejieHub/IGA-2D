@@ -52,10 +52,19 @@ public class PlayerController : MonoBehaviour
     public Vector2 checkBoxSize = new Vector2(0.4f, 0.1f);
     public LayerMask groundLayer;
 
+    private float spriteHeight;
+
     void Start()
     {
         gpaBaseScale = gpaBar.localScale;
         pressureBaseScale = pressureBar.localScale;
+
+        // 自动获取精灵高度
+        SpriteRenderer sr = GetComponent<SpriteRenderer>();
+        if (sr != null)
+        {
+            spriteHeight = sr.bounds.size.y;
+        }
     }
     void Update()
     {
@@ -196,5 +205,28 @@ public class PlayerController : MonoBehaviour
     {
         GPA -= amount;
         GPA = Mathf.Clamp(GPA, minGPA, maxGPA);
+    }
+
+    private void OnCollisionEnter2D(Collision2D collision)
+    {
+        if (collision.gameObject.CompareTag("Enemy"))
+        {
+            Vector2 contactPoint = collision.GetContact(0).point;
+            Vector2 playerBottom = transform.position - new Vector3(0, spriteHeight / 2f, 0);
+
+
+            if (contactPoint.y < playerBottom.y)
+            {
+                // 从上方踩中敌人
+                EnemyPatrol enemy = collision.gameObject.GetComponent<EnemyPatrol>();
+                if (enemy != null)
+                {
+                    enemy.OnStomped();
+
+                    // 玩家反弹
+                    rb2d.velocity = new Vector2(rb2d.velocity.x, jumpForce * 0.8f);
+                }
+            }
+        }
     }
 }
