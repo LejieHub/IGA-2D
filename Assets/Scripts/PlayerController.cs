@@ -19,11 +19,23 @@ public class PlayerController : MonoBehaviour
     public enum FamilyBackground { Good, Bad }
     public enum Hobby { Game, Music, Sport }
 
+    public enum IQ { Good, Medium, Poor }
+    public IQ iq = IQ.Good;
+
     [Header("Character Attributes")]
     public Personality personality = Personality.Introvert;
     public AcademicLevel academicLevel = AcademicLevel.Medium;
     public FamilyBackground familyBackground = FamilyBackground.Good;
     public Hobby hobby = Hobby.Game;
+
+    [Header("Hurt Settings")]
+    [SerializeField] float hurtDuration = 1f;   // 硬直时间
+    [SerializeField] float hurtUpForce = 15f;     // 向上弹起力度
+    [SerializeField] float hurtBackForce = 8f;   // 横向击退力度
+    bool isHurt = false;                           // 是否硬直中
+
+
+
 
     // ====== GPA & Pressure System ======
     [Header("Status")]
@@ -52,19 +64,10 @@ public class PlayerController : MonoBehaviour
     public Vector2 checkBoxSize = new Vector2(0.4f, 0.1f);
     public LayerMask groundLayer;
 
-    private float spriteHeight;
-
     void Start()
     {
         gpaBaseScale = gpaBar.localScale;
         pressureBaseScale = pressureBar.localScale;
-
-        // 自动获取精灵高度
-        SpriteRenderer sr = GetComponent<SpriteRenderer>();
-        if (sr != null)
-        {
-            spriteHeight = sr.bounds.size.y;
-        }
     }
     void Update()
     {
@@ -124,11 +127,13 @@ public class PlayerController : MonoBehaviour
 
     void Move()
     {
+        if (isHurt) return;
         rb2d.velocity = new Vector2(inputHorizontal * moveSpeed, rb2d.velocity.y);
     }
 
     void Jump()
     {
+        if (isHurt) return;
         if (canJump)
         {
             rb2d.velocity = Vector2.up * jumpForce;
@@ -207,26 +212,37 @@ public class PlayerController : MonoBehaviour
         GPA = Mathf.Clamp(GPA, minGPA, maxGPA);
     }
 
-    private void OnCollisionEnter2D(Collision2D collision)
+    public void TakeDamage(Transform source)
     {
-        if (collision.gameObject.CompareTag("Enemy"))
+        if (isHurt) return;
+
+        isHurt = true;
+        // 受击动画
+        anim.SetTrigger("Hurt");
+
+        float dir = Mathf.Sign(transform.position.x - source.position.x);
+
+        rb2d.velocity = Vector2.zero;
+        rb2d.velocity = new Vector2(dir * hurtBackForce, hurtUpForce);
+        
+
+        // 禁用输入/攻击（如果你有输入脚本，记得在这里关，hurt 结束后再开）
+        StartCoroutine(HurtRoutine());
+    }
+
+    private System.Collections.IEnumerator HurtRoutine()
+    {
+        // 硬直期间可根据需要禁止 Move/Jump，这里仅做时间控制
+        yield return new WaitForSeconds(hurtDuration);
+        isHurt = false;
+    }
+
+    private void OnTriggerEnter2D(Collider2D other)
+    {
+        if (other.CompareTag("EnemyDamage"))
         {
-            Vector2 contactPoint = collision.GetContact(0).point;
-            Vector2 playerBottom = transform.position - new Vector3(0, spriteHeight / 2f, 0);
-
-
-            if (contactPoint.y < playerBottom.y)
-            {
-                // 从上方踩中敌人
-                EnemyPatrol enemy = collision.gameObject.GetComponent<EnemyPatrol>();
-                if (enemy != null)
-                {
-                    enemy.OnStomped();
-
-                    // 玩家反弹
-                    rb2d.velocity = new Vector2(rb2d.velocity.x, jumpForce * 0.8f);
-                }
-            }
+            TakeDamage(other.transform);
         }
     }
+
 }

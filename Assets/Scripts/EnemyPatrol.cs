@@ -3,22 +3,23 @@ using UnityEngine;
 public class EnemyPatrol : MonoBehaviour
 {
     [Header("Movement Settings")]
-    public float leftRange = 2f;
-    public float rightRange = 4f;
     public float moveSpeed = 1.5f;
 
     [Header("Idle Settings")]
     public float idleDurationMin = 1f;
     public float idleDurationMax = 3f;
 
+    [Header("Environment Check")]
+    public Transform groundCheck;
+    public Transform wallCheck;
+    public float checkDistance = 0.2f;
+    public LayerMask groundLayer;
+
+
     private float currentIdleDuration;
 
     private Rigidbody2D rb;
     private Animator anim;
-
-    private Vector3 startPoint;
-    private Vector3 leftBound;
-    private Vector3 rightBound;
 
     private bool movingRight = true;
     private bool isIdle = false;
@@ -28,7 +29,7 @@ public class EnemyPatrol : MonoBehaviour
 
     public float popUpForce = 4f;  // 弹起力度
     public float fallDelay = 0.5f; // 弹起后多久开始下落
-    public float fallSpeed = 10f;
+    public float stompGravityScale = 3f;
 
 
     void Start()
@@ -36,15 +37,13 @@ public class EnemyPatrol : MonoBehaviour
         rb = GetComponent<Rigidbody2D>();
         anim = GetComponent<Animator>();
 
-        startPoint = transform.position;
-        leftBound = startPoint - Vector3.right * leftRange;
-        rightBound = startPoint + Vector3.right * rightRange;
-
         Flip();
     }
 
     void Update()
     {
+        if (isStomped) return;
+
         if (isIdle)
         {
             idleTimer += Time.deltaTime;
@@ -63,6 +62,16 @@ public class EnemyPatrol : MonoBehaviour
             }
         }
 
+        // 如果检测到墙壁或前方无地面，则进入 idle
+        bool hitWall = Physics2D.Raycast(wallCheck.position, movingRight ? Vector2.right : Vector2.left, checkDistance, groundLayer);
+        bool noGround = !Physics2D.Raycast(groundCheck.position, Vector2.down, checkDistance, groundLayer);
+
+        if (hitWall || noGround)
+        {
+            EnterIdle();
+            return;
+        }
+
         Patrol();
     }
 
@@ -71,11 +80,6 @@ public class EnemyPatrol : MonoBehaviour
         float direction = movingRight ? 1f : -1f;
         rb.velocity = new Vector2(direction * moveSpeed, rb.velocity.y);
         SetAnimation(true);
-
-        if (movingRight && transform.position.x >= rightBound.x)
-            EnterIdle();
-        else if (!movingRight && transform.position.x <= leftBound.x)
-            EnterIdle();
     }
 
     void EnterIdle()
@@ -98,11 +102,6 @@ public class EnemyPatrol : MonoBehaviour
         transform.localScale = scale;
     }
 
-    private void OnDrawGizmosSelected()
-    {
-        Gizmos.color = Color.yellow;
-        Gizmos.DrawLine(transform.position - Vector3.right * leftRange, transform.position + Vector3.right * rightRange);
-    }
 
     public void OnStomped()
     {
@@ -111,7 +110,6 @@ public class EnemyPatrol : MonoBehaviour
 
         // 停止一切行为
         rb.velocity = Vector2.zero;
-        rb.gravityScale = 1f;
         anim.SetBool("isWalking", false);
         anim.SetTrigger("Stomped"); // 可选动画
 
@@ -120,15 +118,27 @@ public class EnemyPatrol : MonoBehaviour
         if (col) col.enabled = false;
 
         // 弹起
+        rb.bodyType = RigidbodyType2D.Dynamic;
+        rb.constraints = RigidbodyConstraints2D.FreezeRotation;
+        rb.gravityScale = 0f;
         rb.velocity = new Vector2(0, popUpForce);
-        StartCoroutine(FallAfterDelay());
+        StartCoroutine(DoFall());
     }
 
-    private System.Collections.IEnumerator FallAfterDelay()
+    private System.Collections.IEnumerator DoFall()
     {
         yield return new WaitForSeconds(fallDelay);
-        rb.velocity = new Vector2(0, -fallSpeed);
+        rb.gravityScale = stompGravityScale;
         yield return new WaitForSeconds(2f); // 等待掉出视野
         Destroy(gameObject); // 销毁
+    }
+
+    void OnDrawGizmosSelected()
+    {
+        if (groundCheck != null)
+            Gizmos.DrawLine(groundCheck.position, groundCheck.position + Vector3.down * checkDistance);
+
+        if (wallCheck != null)
+            Gizmos.DrawLine(wallCheck.position, wallCheck.position + (movingRight ? Vector3.right : Vector3.left) * checkDistance);
     }
 }
