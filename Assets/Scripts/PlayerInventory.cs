@@ -11,7 +11,7 @@ public class PlayerInventory : MonoBehaviour
     public GameObject currentHandheld;   // 当前手持小模型实例
 
     [Header("Throwable Defaults")]
-    public bool defaultUpgraded = true;  // 可选：给会丢掷的手持一个默认升级状态
+    public bool defaultUpgraded = false;  // 可选：给会丢掷的手持一个默认升级状态
 
     // 拾取入口（单持）
     public bool Pick(ItemData item)
@@ -39,7 +39,7 @@ public class PlayerInventory : MonoBehaviour
             if (throwable != null)
             {
                 // 把“玩家 Transform”和“手持锚点”注入；第三个参数可由 ItemData 决定
-                throwable.Setup(playerTransform: transform, handAnchor: handAnchor, upgraded: defaultUpgraded);
+                throwable.Setup(playerTransform: transform, handAnchor: handAnchor, upgraded: false);
             }
         }
 

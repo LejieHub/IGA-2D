@@ -1,24 +1,67 @@
-using UnityEngine;
+ï»¿using UnityEngine;
 
 public enum HandheldState { Static, FlyingAway, FlyingBack, Floating, BeingTossed }
 
 public class ThrowableHandheld : MonoBehaviour
 {
     [Header("Injected at runtime")]
-    [SerializeField] Transform player;         // Íæ¼Ò Transform£¨ÓÉ PlayerInventory ×¢Èë£©
-    [SerializeField] Transform originalPoint;  // ÊÖ³ÖÃªµã HandAnchor£¨ÓÉ PlayerInventory ×¢Èë£©
+    [SerializeField] Transform player;          // ç”±å¤–éƒ¨æ³¨å…¥
+    [SerializeField] Transform originalPoint;   // ç”±å¤–éƒ¨æ³¨å…¥
+
+    Rigidbody2D rb;
 
     [Header("Mode")]
-    [SerializeField] bool isUpgraded = true;   // Éı¼¶Ä£Ê½£¨»ØĞıïÚÊ½£©/ ·ÇÉı¼¶£¨Å×ÖÀ+Æ¯¸¡£©
+    [SerializeField] bool isUpgraded = false;    // å›æ—‹é•–/æ™®é€š
 
     [Header("State (readonly)")]
     public HandheldState state = HandheldState.Static;
 
-    // ¡ª¡ª Óë¡°Baby¡±±£³ÖÒ»ÖÂµÄ²ÎÊı£¨²»±ä£© ¡ª¡ª
-    float tickCounter = 0f;
-    float curDropSpeed = 0f;  // BeingTossed Ê±µÄ¡°ÏÂÂäËÙ¶ÈÀÛ»ı¡±£¨Î±ÖØÁ¦£©
+    // -------- å¯è°ƒå‚æ•°ï¼ˆInspectorï¼‰--------
+    [Header("Shared")]
+    [Tooltip("è‡ªè½¬è§’é€Ÿåº¦ï¼ˆåº¦/å¸§ï¼‰")]
+    [SerializeField, Range(0f, 50f)] float rotateDegPerTick = 20f;
 
-    // ====== API£º¹©Íâ²¿×¢Èë£¨PlayerInventory.EquipÊ±µ÷ÓÃ£© ======
+    [Tooltip("ç©å®¶é™„è¿‘åˆ¤å®šä¸ºå·²å›æ”¶çš„è·ç¦»")]
+    [SerializeField, Range(0.01f, 1f)] float catchDistance = 1f;
+
+    [Header("Boomerang (Upgraded)")]
+    [Tooltip("å‘å¤–é£è¡Œçš„é€Ÿåº¦ï¼ˆå•ä½/ç§’ï¼‰")]
+    [SerializeField, Range(0.1f, 30f)] float boomerangFlySpeed = 30f;
+
+    [Tooltip("å›ç¨‹é€Ÿåº¦ï¼ˆå•ä½/ç§’ï¼‰")]
+    [SerializeField, Range(0.1f, 30f)] float boomerangReturnSpeed = 30f;
+
+    [Tooltip("ç¦»å¼€ç©å®¶çš„æœ€å¤§å¤–å»¶è·ç¦»ï¼Œè¶…è¿‡åå¼€å§‹æŠ˜è¿”")]
+    [SerializeField, Range(0.1f, 30f)] float boomerangMaxDistance = 8f;
+
+    [Header("Normal Throw (Non-upgraded)")]
+    [Tooltip("åˆå§‹å‘é¼ æ ‡æ–¹å‘çš„æ°´å¹³é€Ÿåº¦ï¼ˆå•ä½/ç§’ï¼‰")]
+    [SerializeField, Range(0.1f, 50f)] float normalFlySpeed = 30f;
+
+    [Tooltip("é‡åŠ›åŠ é€Ÿåº¦ï¼ˆå•ä½/ç§’Â²ï¼‰ï¼Œæ¨¡æ‹Ÿä¸‹å ")]
+    [SerializeField, Range(0f, 50f)] float dropAcceleration = 30f;
+
+    [Header("Floating (éå‡çº§å‘½ä¸­åçš„æ¼‚æµ®)")]
+    [Tooltip("ä¸Šä¸‹æŠ–åŠ¨çš„å‘¨æœŸï¼ˆç§’ï¼‰")]
+    [SerializeField, Range(0.1f, 5f)] float floatCycle = 0.8f;
+
+    [Tooltip("æ²¿è‡ªèº«upè½´æŠ–åŠ¨çš„é€Ÿåº¦ï¼ˆå•ä½/ç§’ï¼‰")]
+    [SerializeField, Range(0f, 1f)] float floatSpeed = 0.2f;
+
+    // -------- ç§æœ‰è¿è¡Œæ—¶å˜é‡ --------
+    float tickCounter = 0f;
+    float curDropSpeed = 0f;
+
+    void Awake()
+    {
+        rb = GetComponent<Rigidbody2D>();
+        if (rb != null)
+        {
+            rb.simulated = false;    // é»˜è®¤æ‹¿åœ¨æ‰‹é‡Œæ—¶ä¸å‚ä¸ç¢°æ’
+        }
+    }
+
+    // ========== å¤–éƒ¨æ³¨å…¥ ==========
     public void Setup(Transform playerTransform, Transform handAnchor, bool upgraded)
     {
         player = playerTransform;
@@ -27,19 +70,16 @@ public class ThrowableHandheld : MonoBehaviour
         state = HandheldState.Static;
         curDropSpeed = 0f;
 
-        // ³õÊ¼¾ÍÌùµ½ÊÖ
         transform.SetParent(handAnchor, worldPositionStays: false);
         transform.localPosition = Vector3.zero;
         transform.localRotation = Quaternion.identity;
     }
 
-    // ¿ÉÑ¡£ºÍâ²¿ÇĞ»»Éı¼¶×´Ì¬£¨±ÈÈçÄ³¸öBUFF£©
     public void SetUpgraded(bool upgraded) => isUpgraded = upgraded;
 
-    // ================== ÊäÈë£¨°´ÄãĞèÇó£º×ó¼ü£© ==================
+    // ========== è¾“å…¥ ==========
     void Update()
     {
-        // °´ R ÇĞ»»
         if (Input.GetKeyDown(KeyCode.R))
             ToggleMode();
 
@@ -53,14 +93,22 @@ public class ThrowableHandheld : MonoBehaviour
             else
             {
                 if (state == HandheldState.Static)
+                {
+                    // >>> æ–°å¢ï¼šè„±ç¦» player <<<
+                    transform.SetParent(null, true);
+
                     state = HandheldState.BeingTossed;
+                    rb.simulated = true; 
+                }
                 else if (state == HandheldState.Floating)
+                {
                     state = HandheldState.FlyingBack;
+                }
             }
         }
     }
 
-    // ================== ÔË¶¯/×´Ì¬»ú ==================
+    // ========== è¿åŠ¨/çŠ¶æ€æœº ==========
     void FixedUpdate()
     {
         switch (state)
@@ -85,7 +133,7 @@ public class ThrowableHandheld : MonoBehaviour
 
     void StickToHand()
     {
-        if (originalPoint == null) return;
+        if (!originalPoint) return;
         transform.SetParent(originalPoint, worldPositionStays: false);
         transform.localPosition = Vector3.zero;
         transform.localRotation = originalPoint.localRotation;
@@ -94,14 +142,17 @@ public class ThrowableHandheld : MonoBehaviour
 
     void SwingForward()
     {
-        float flySpeed = 1f;
+        // æ–¹å‘ï¼šä»ç©å®¶æŒ‡å‘é¼ æ ‡
         Vector3 mousePos = Camera.main.ScreenToWorldPoint(Input.mousePosition);
+        mousePos.z = player.position.z;
         Vector3 dir = (mousePos - player.position);
-        dir.z = 0;
-        dir = dir.normalized;
+        dir.z = 0f;
+        dir = dir.sqrMagnitude > 0.0001f ? dir.normalized : Vector3.right;
 
-        transform.position += dir * flySpeed;
-        if (Vector3.Distance(player.position, transform.position) > 2f)
+        transform.position += dir * boomerangFlySpeed * Time.fixedDeltaTime;
+
+        // è§¦å‘å›ç¨‹çš„å¤–å»¶åŠå¾„
+        if (Vector3.Distance(player.position, transform.position) > boomerangMaxDistance)
             state = HandheldState.FlyingBack;
 
         SelfRotate();
@@ -109,11 +160,14 @@ public class ThrowableHandheld : MonoBehaviour
 
     void SwingBackToPlayer()
     {
-        float flySpeed = 0.2f;
-        Vector3 dir = (player.position - transform.position).normalized;
-        transform.position += dir * flySpeed;
+        Vector3 dir = (player.position - transform.position);
+        dir.z = 0f;
+        float dist = dir.magnitude;
+        if (dist > 0.0001f) dir /= dist;
 
-        if (Vector3.Distance(player.position, transform.position) < 0.2f)
+        transform.position += dir * boomerangReturnSpeed * Time.fixedDeltaTime;
+
+        if (dist < catchDistance)
             state = HandheldState.Static;
 
         SelfRotate();
@@ -121,53 +175,48 @@ public class ThrowableHandheld : MonoBehaviour
 
     void FlyAndDrop()
     {
-        float flySpeed = 0.13f;
+        // æ°´å¹³å‘é¼ æ ‡æ–¹å‘é£
         Vector3 mousePos = Camera.main.ScreenToWorldPoint(Input.mousePosition);
+        mousePos.z = player.position.z;
         Vector3 dir = (mousePos - player.position);
-        dir.z = 0;
-        dir = dir.normalized;
+        dir.z = 0f;
+        dir = dir.sqrMagnitude > 0.0001f ? dir.normalized : Vector3.right;
 
-        // ÏòÊó±ê·½Ïò·É
-        transform.position += dir * flySpeed;
+        transform.position += dir * normalFlySpeed * Time.fixedDeltaTime;
 
-        // Î±ÖØÁ¦£ºÖğÖ¡Ôö¼ÓÏÂÂäËÙ¶È
-        float dropAcceleration = 0.005f;
-        curDropSpeed += dropAcceleration;
-        transform.position += Vector3.down * curDropSpeed;
+        // ä¼ªé‡åŠ›ï¼šv = v0 + a * dt
+        curDropSpeed += dropAcceleration * Time.fixedDeltaTime;
+        transform.position += Vector3.down * curDropSpeed * Time.fixedDeltaTime;
     }
 
     void Vibrate()
     {
-        float timeCycle = 0.8f;
-        float flySpeed = 0.002f;
+        tickCounter += Time.fixedDeltaTime;
+        if (tickCounter > floatCycle) tickCounter = -floatCycle;
 
-        tickCounter += Time.deltaTime;
-        if (tickCounter > timeCycle) tickCounter = -timeCycle;
-
+        float step = floatSpeed * Time.fixedDeltaTime;
         if (tickCounter > 0f)
-            transform.position += transform.up * flySpeed;
+            transform.position += transform.up * step;
         else
-            transform.position -= transform.up * flySpeed;
+            transform.position -= transform.up * step;
     }
 
     void SelfRotate()
     {
-        transform.eulerAngles += new Vector3(0, 0, 20);
+        transform.eulerAngles += new Vector3(0, 0, rotateDegPerTick);
     }
 
-    // ================== Åö×²´¦Àí ==================
+    // ========== ç¢°æ’ ==========
     void OnCollisionEnter2D(Collision2D collision)
     {
-        curDropSpeed = 0f; // ÂäµØ/ÃüÖĞÖØÖÃÏÂÂäËÙ¶È
+        curDropSpeed = 0f; // å‘½ä¸­/è½åœ° é‡ç½®
 
-        // 1) µĞÈË£ºÖ»ÅĞ¶Ï Tag »ò Layer£¬²»×öÉËº¦
         if (collision.gameObject.CompareTag("Enemy"))
         {
             state = isUpgraded ? HandheldState.FlyingBack : HandheldState.Floating;
             return;
         }
 
-        // ×²µ½Íæ¼Ò£ºÈôÔÚÆ¯¸¡Ôò»ØÊÕ
         if (collision.gameObject.TryGetComponent(out PlayerController _))
         {
             if (state == HandheldState.Floating)
@@ -175,13 +224,29 @@ public class ThrowableHandheld : MonoBehaviour
             return;
         }
 
-        // ÆäËû£ºÉı¼¶»ØÊÕ£¬·ÇÉı¼¶Æ¯¸¡
         state = isUpgraded ? HandheldState.FlyingBack : HandheldState.Floating;
+        if (!isUpgraded)
+        {
+            this.enabled = false;
+        }
     }
 
     void ToggleMode()
     {
         isUpgraded = !isUpgraded;
-        Debug.Log($"Handheld mode: {(isUpgraded ? "Upgraded (»ØĞıïÚ)" : "Normal (Í¶ÖÀ)")}");
+        Debug.Log($"Handheld mode: {(isUpgraded ? "Upgraded (å›æ—‹é•–)" : "Normal (æŠ•æ·)")}");
     }
+
+#if UNITY_EDITOR
+    void OnDrawGizmosSelected()
+    {
+        if (player)
+        {
+            Gizmos.color = Color.cyan;
+            Gizmos.DrawWireSphere(player.position, boomerangMaxDistance);
+            Gizmos.color = Color.green;
+            Gizmos.DrawWireSphere(player.position, catchDistance);
+        }
+    }
+#endif
 }
